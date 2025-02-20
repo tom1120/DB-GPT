@@ -14,6 +14,7 @@
         <img alt="forks" src="https://img.shields.io/github/forks/eosphoros-ai/db-gpt?style=social" />
     </a>
     <a href="https://opensource.org/licenses/MIT">
+    <a href="https://opensource.org/licenses/MIT">
       <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
     </a>
      <a href="https://github.com/eosphoros-ai/DB-GPT/releases">

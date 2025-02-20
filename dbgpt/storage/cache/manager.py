@@ -137,6 +137,11 @@ def initialize_cache(
                 f"message: {str(e)}"
             )
             cache_storage = MemoryCacheStorage(max_memory_mb=max_memory_mb)
+        except Exception as e:
+            logger.error(
+                f"error=========================== "
+                f"message: {str(e)}"
+            )
     else:
         cache_storage = MemoryCacheStorage(max_memory_mb=max_memory_mb)
     system_app.register(
