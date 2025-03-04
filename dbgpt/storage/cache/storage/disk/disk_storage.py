@@ -5,7 +5,8 @@ Implement the cache storage using rocksdb.
 import logging
 from typing import Optional
 
-from rocksdict import Options, Rdict
+# from rocksdict import Options, Rdict
+from speedict import Options, Rdict
 
 from dbgpt.core.interface.cache import (
     CacheConfig,
