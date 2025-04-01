@@ -27,6 +27,7 @@ from dbgpt.configs.model_config import (
     LOGDIR,
     STATIC_MESSAGE_IMG_PATH,
 )
+from dbgpt.model.cluster.worker.manager import initialize_worker_manager_in_client_config
 from dbgpt.serve.core import add_exception_handler
 from dbgpt.util.fastapi import create_app, register_event_handler, replace_router
 from dbgpt.util.i18n_utils import _, set_default_language
@@ -204,6 +205,7 @@ def initialize_app(param: WebServerParameters = None, args: List[str] = None):
             rerank_model_path=rerank_model_path,
             start_listener=model_start_listener,
             system_app=system_app,
+            is_db_model=True,
         )
 
         CFG.NEW_SERVER_MODE = True

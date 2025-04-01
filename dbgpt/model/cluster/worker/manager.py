@@ -13,7 +13,10 @@ from typing import AsyncIterator, Awaitable, Callable, Iterator
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from httpx import Proxy
 
+from dbgpt.app.llm_manage.model_instance_db import ModelInstanceDao, ModelInstancePydantic
+from dbgpt.app.llm_manage.model_instance_service import model_startup_from_db
 from dbgpt.component import SystemApp
 from dbgpt.configs.model_config import LOGDIR
 from dbgpt.core import ModelMetadata, ModelOutput
@@ -26,7 +29,7 @@ from dbgpt.model.cluster.manager_base import (
 )
 from dbgpt.model.cluster.registry import ModelRegistry
 from dbgpt.model.cluster.worker_base import ModelWorker
-from dbgpt.model.parameter import ModelWorkerParameters, WorkerType
+from dbgpt.model.parameter import ModelWorkerParameters, ProxyModelParameters, WorkerType
 from dbgpt.model.utils.llm_utils import list_supported_models
 from dbgpt.util.fastapi import create_app, register_event_handler
 from dbgpt.util.parameter_utils import (
@@ -157,6 +160,7 @@ class LocalWorkerManager(WorkerManager):
         worker: ModelWorker,
         worker_params: ModelWorkerParameters,
         command_args: List[str] = None,
+        model_params: ProxyModelParameters=None,
     ) -> bool:
         if not command_args:
             command_args = sys.argv[1:]
@@ -173,8 +177,10 @@ class LocalWorkerManager(WorkerManager):
         )
 
         # Load model params from persist storage
-        model_params = worker.parse_parameters(command_args=command_args)
-
+        # 这里实际是配置文件中获取的
+        if model_params is None:
+            model_params = worker.parse_parameters(command_args=command_args)
+        # model_params = worker.parse_parameters(command_args=command_args)
         worker_run_data = WorkerRunData(
             host=self.host,
             port=self.port,
@@ -997,6 +1003,7 @@ def _start_local_worker(
     worker_manager: WorkerManagerAdapter,
     worker_params: ModelWorkerParameters,
     ext_worker_kwargs: Optional[Dict[str, Any]] = None,
+    model_params: ProxyModelParameters = None,
 ):
     with root_tracer.start_span(
         "WorkerManager._start_local_worker",
@@ -1010,7 +1017,7 @@ def _start_local_worker(
         worker = _build_worker(worker_params, ext_worker_kwargs=ext_worker_kwargs)
         if not worker_manager.worker_manager:
             worker_manager.worker_manager = _create_local_model_manager(worker_params)
-        worker_manager.worker_manager.add_worker(worker, worker_params)
+        worker_manager.worker_manager.add_worker(worker, worker_params,model_params=model_params)
 
 
 def _start_local_embedding_worker(
@@ -1034,8 +1041,8 @@ def _start_local_embedding_worker(
         worker_manager, embedding_worker_params, ext_worker_kwargs=ext_worker_kwargs
     )
 
-
-def initialize_worker_manager_in_client(
+# 从配置文件读取模型，只支持一个模型，旧版本
+def initialize_worker_manager_in_client_config(
     app=None,
     include_router: bool = True,
     model_name: Optional[str] = None,
@@ -1118,6 +1125,120 @@ def initialize_worker_manager_in_client(
     if include_router and app:
         # mount WorkerManager router
         app.include_router(router, prefix="/api")
+
+
+# 改为从db中读取，支持多个模型，暂时只处理本地模式,is_db_model默认否，如果设置为true则从数据库读取
+def initialize_worker_manager_in_client(
+    app=None,
+    include_router: bool = True,
+    model_name: Optional[str] = None,
+    model_path: Optional[str] = None,
+    run_locally: bool = True,
+    controller_addr: Optional[str] = None,
+    local_port: int = 5670,
+    embedding_model_name: Optional[str] = None,
+    embedding_model_path: Optional[str] = None,
+    rerank_model_name: Optional[str] = None,
+    rerank_model_path: Optional[str] = None,
+    start_listener: Optional[Callable[["WorkerManager"], None]] = None,
+    system_app: Optional[SystemApp] = None,
+    is_db_model: bool = False,
+):
+    """Initialize WorkerManager in client.
+    If run_locally is True:
+    1. Start ModelController
+    2. Start LocalWorkerManager
+    3. Start worker in LocalWorkerManager
+    4. Register worker to ModelController
+
+    otherwise:
+    1. Build ModelRegistryClient with controller address
+    2. Start RemoteWorkerManager
+
+    """
+    global worker_manager
+
+    if not app:
+        raise Exception("app can't be None")
+
+    if system_app:
+        logger.info(f"Register WorkerManager {_DefaultWorkerManagerFactory.name}")
+        system_app.register(_DefaultWorkerManagerFactory, worker_manager)
+
+
+    worker_params: ModelWorkerParameters = _parse_worker_params(
+    model_name=model_name, model_path=model_path, controller_addr=controller_addr
+    )
+
+
+    controller_addr = None
+    if run_locally:
+        # TODO start ModelController
+        worker_params.standalone = True
+        worker_params.register = True
+        worker_params.port = local_port
+        logger.info(f"Worker params: {worker_params}")
+        _setup_fastapi(worker_params, app, ignore_exception=True, system_app=system_app)
+        # 判断是否从数据库读取模型
+        if is_db_model:
+            dao = ModelInstanceDao()
+            model_instances :List[ModelInstancePydantic] = dao.get_list({})
+            for model_instance in model_instances:
+                worker_params: ModelWorkerParameters = _parse_worker_params(
+                    model_name=model_instance.params.model_name, 
+                    model_path=model_instance.params.model_path, 
+                    controller_addr=controller_addr,
+                    host = model_instance.host,
+                    port = model_instance.port,
+                    worker_type = model_instance.worker_type,
+                    # proxy_server_url = model_instance.params.proxy_server_url,
+                    # proxy_api_key = model_instance.params.proxy_api_key,
+                    # proxy_api_base = model_instance.params.proxy_api_base,
+                    # proxy_api_app_id = model_instance.params.proxy_api_app_id,
+                    # proxy_api_secret = model_instance.params.proxy_api_secret,
+
+                )
+                model_params: ProxyModelParameters = ProxyModelParameters(
+                    **model_instance.params.dict()
+                    )
+                _start_local_worker(worker_manager, worker_params,model_params=model_params)
+        else:
+            _start_local_worker(worker_manager, worker_params)
+        worker_manager.after_start(start_listener)
+        _start_local_embedding_worker(
+            worker_manager, embedding_model_name, embedding_model_path
+        )
+        _start_local_embedding_worker(
+            worker_manager,
+            rerank_model_name,
+            rerank_model_path,
+            ext_worker_kwargs={"rerank_model": True},
+        )
+    else:
+        from dbgpt.model.cluster.controller.controller import (
+            ModelRegistryClient,
+            initialize_controller,
+        )
+        from dbgpt.model.cluster.worker.remote_manager import RemoteWorkerManager
+
+        if not worker_params.controller_addr:
+            raise ValueError("Controller can`t be None")
+        logger.info(f"Worker params: {worker_params}")
+        client = ModelRegistryClient(worker_params.controller_addr)
+        worker_manager.worker_manager = RemoteWorkerManager(client)
+        worker_manager.after_start(start_listener)
+        initialize_controller(
+            app=app,
+            remote_controller_addr=worker_params.controller_addr,
+            system_app=system_app,
+        )
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(worker_manager.start())
+
+    if include_router and app:
+        # mount WorkerManager router
+        app.include_router(router, prefix="/api")
+
 
 
 def run_worker_manager(

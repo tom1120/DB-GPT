@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from dbgpt._private.config import Config
 from dbgpt.app.knowledge.request.request import KnowledgeSpaceRequest
 from dbgpt.app.knowledge.service import KnowledgeService
+from dbgpt.app.llm_manage.model_instance_db import ModelInstanceDao, ModelInstancePydantic
 from dbgpt.app.openapi.api_view_model import (
     ChatCompletionResponseStreamChoice,
     ChatCompletionStreamResponse,
@@ -586,14 +587,33 @@ async def terminate_topic(
         return Result.failed(code="E0102", msg=str(e))
 
 
-@router.get("/v1/model/types")
-async def model_types(controller: BaseModelController = Depends(get_model_controller)):
-    logger.info(f"/controller/model/types")
+@router.get("/v1/model/types_memory")
+async def model_types_memory(controller: BaseModelController = Depends(get_model_controller)):
+    logger.info(f"/controller/model/types_memory")
     try:
         types = set()
         models = await controller.get_all_instances(healthy_only=True)
         for model in models:
             worker_name, worker_type = model.model_name.split("@")
+            if worker_type == "llm" and worker_name not in [
+                "codegpt_proxyllm",
+                "text2sql_proxyllm",
+            ]:
+                types.add(worker_name)
+        return Result.succ(list(types))
+
+    except Exception as e:
+        return Result.failed(code="E000X", msg=f"controller model types error {e}")
+
+@router.get("/v1/model/types")
+async def model_types():
+    logger.info(f"/controller/model/types")
+    try:
+        types = set()
+        dao = ModelInstanceDao()
+        model_instances:List[ModelInstancePydantic] = dao.get_list({})
+        for model in model_instances:
+            worker_name, worker_type = model.model,model.worker_type
             if worker_type == "llm" and worker_name not in [
                 "codegpt_proxyllm",
                 "text2sql_proxyllm",
