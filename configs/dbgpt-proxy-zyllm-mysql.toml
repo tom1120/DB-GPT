@@ -1,0 +1,45 @@
+[system]
+# Load language from environment variable(It is set by the hook)
+language = "${env:DBGPT_LANG:-zh}"
+api_keys = []
+encrypt_key = "your_secret_key"
+
+# Server Configurations
+[service.web]
+host = "0.0.0.0"
+port = 5670
+
+[service.web.database]
+type = "mysql"
+host = "${env:MYSQL_HOST:-192.168.96.18}"
+port = "${env:MYSQL_PORT:-3308}"
+database = "${env:MYSQL_DATABASE:-dbgpt}"
+user = "${env:MYSQL_USER:-qlong}"
+password ="${env:MYSQL_PASSWORD:-QlongDataBase1314}"
+
+[service.model.worker]
+host = "127.0.0.1"
+
+[rag.storage]
+[rag.storage.vector]
+type = "PGVector"
+connection_string = "postgresql+psycopg2://postgres:Zy42899975@192.168.99.14:5433/ruoyi-vue-pro"
+
+# Model Configurations
+[models]
+[[models.llms]]
+name = "moonshot-v1-8k"
+provider = "proxy/moonshot"
+api_key = "${env:MOONSHOT_API_KEY}"
+
+[[models.embeddings]]
+name = "BAAI/bge-large-zh-v1.5"
+provider = "proxy/openai"
+api_url = "https://api.siliconflow.cn/v1/embeddings"
+api_key = "${env:SILICONFLOW_API_KEY}"
+
+[[models.rerankers]]
+type = "reranker"
+name = "BAAI/bge-reranker-v2-m3"
+provider = "proxy/siliconflow"
+api_key = "${env:SILICONFLOW_API_KEY}"

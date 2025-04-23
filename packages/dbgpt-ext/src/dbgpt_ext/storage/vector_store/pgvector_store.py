@@ -115,6 +115,12 @@ class PGVectorStore(VectorStoreBase):
     ) -> List[Chunk]:
         """Perform similar search in PGVector."""
         return self.vector_store_client.similarity_search(text, topk, filters)
+    
+    def similar_search_with_scores(
+        self, text: str, topk: int,score_threshold: float, filters: Optional[MetadataFilters] = None
+    ) -> List[Chunk]:
+        """Perform similar search in PGVector."""
+        return self.filter_by_score_threshold(self.vector_store_client.similarity_search_with_score(text, topk, filters),score_threshold=score_threshold)
 
     def vector_name_exists(self) -> bool:
         """Check if vector name exists."""
@@ -135,7 +141,7 @@ class PGVectorStore(VectorStoreBase):
             List[str]: chunk ids.
         """
         lc_documents = [Chunk.chunk2langchain(chunk) for chunk in chunks]
-        self.vector_store_client.from_documents(lc_documents)  # type: ignore
+        self.vector_store_client.from_documents(lc_documents,self.embeddings)  # type: ignore
         return [str(chunk.chunk_id) for chunk in lc_documents]
 
     def delete_vector_name(self, vector_name: str):
