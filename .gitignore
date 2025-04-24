@@ -27,6 +27,7 @@ wheels/
 /models/
 # Soft link
 /models
+/models_local
 plugins/
 
 pip-wheel-metadata/

@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from IPython import embed
 from dbgpt.core import Chunk, Embeddings
 from dbgpt.core.awel.flow import Parameter, ResourceCategory, register_resource
 from dbgpt.storage.vector_store.base import (
@@ -116,11 +117,58 @@ class PGVectorStore(VectorStoreBase):
         """Perform similar search in PGVector."""
         return self.vector_store_client.similarity_search(text, topk, filters)
     
+
+    # 基础类查询结果不一致，需要复写查询
+    def filter_by_score_threshold(
+        self, chunks: List[Chunk], score_threshold: float
+    ) -> List[Chunk]:
+        """Filter chunks by score threshold.
+
+        Args:
+            chunks(List[Chunks]): The chunks to filter.
+            score_threshold(float): The score threshold.
+        Return:
+            List[Chunks]: The filtered chunks.
+        """
+        candidates_chunks = chunks
+        if score_threshold is not None:
+            candidates_chunks = [
+                Chunk(
+                    metadata=chunk.metadata,
+                    content=chunk.content,
+                    score=chunk.score,
+                    chunk_id=chunk.chunk_id,
+                )
+                for chunk in chunks
+                if chunk.score >= score_threshold
+            ]
+            if len(candidates_chunks) == 0:
+                logger.warning(
+                    "No relevant docs were retrieved using the relevance score"
+                    f" threshold {score_threshold}"
+                )
+        return candidates_chunks
+
+    
     def similar_search_with_scores(
         self, text: str, topk: int,score_threshold: float, filters: Optional[MetadataFilters] = None
     ) -> List[Chunk]:
         """Perform similar search in PGVector."""
-        return self.filter_by_score_threshold(self.vector_store_client.similarity_search_with_score(text, topk, filters),score_threshold=score_threshold)
+        # chunks = self.vector_store_client.similarity_search_with_score(text, topk, filters)
+        embeddings = self.embeddings.embed_documents([text])
+        chunks  = self.vector_store_client._query_collection(embedding=embeddings[0], k=topk, filter=filters)
+        lc_chunks = [
+            (
+                Chunk(
+                    content=chunk_result.EmbeddingStore.document,
+                    metadata=chunk_result.EmbeddingStore.cmetadata or {},
+                    score=(1 - chunk_result.distance),
+                    chunk_id = str(chunk_result.EmbeddingStore.custom_id),
+                )
+            )
+            for chunk_result in chunks
+        ]
+        return self.filter_by_score_threshold(lc_chunks,score_threshold=score_threshold)
 
     def vector_name_exists(self) -> bool:
         """Check if vector name exists."""
@@ -141,8 +189,12 @@ class PGVectorStore(VectorStoreBase):
             List[str]: chunk ids.
         """
         lc_documents = [Chunk.chunk2langchain(chunk) for chunk in chunks]
-        self.vector_store_client.from_documents(lc_documents,self.embeddings)  # type: ignore
-        return [str(chunk.chunk_id) for chunk in lc_documents]
+        ids = [str(chunk.chunk_id) for chunk in chunks]
+        self.vector_store_client.from_documents(lc_documents,self.embeddings,
+                                                collection_name=self.collection_name,
+                                                connection_string=self.connection_string,
+                                                ids=ids)  # type: ignore
+        return ids
 
     def delete_vector_name(self, vector_name: str):
         """Delete vector by name.

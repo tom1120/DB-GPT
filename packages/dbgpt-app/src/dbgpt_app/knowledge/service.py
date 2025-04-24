@@ -15,6 +15,7 @@ from dbgpt.model.cluster import WorkerManagerFactory
 from dbgpt.rag.knowledge.base import KnowledgeType
 from dbgpt.rag.retriever.rerank import RerankEmbeddingsRanker
 from dbgpt.util.executor_utils import ExecutorFactory, blocking_func_to_async
+from dbgpt.util.string_utils import remove_trailing_punctuation
 from dbgpt.util.tracer import root_tracer, trace
 from dbgpt_app.knowledge.request.request import (
     ChunkQueryRequest,
@@ -117,6 +118,16 @@ class KnowledgeService:
         documents = knowledge_document_dao.get_knowledge_documents(query)
         if len(documents) > 0:
             raise Exception(f"document name:{request.doc_name} have already named")
+        
+        
+        if not request.questions:
+            questions = ""
+        else:
+            questions = [
+                remove_trailing_punctuation(question) for question in request.questions
+            ]
+            questions = json.dumps(questions, ensure_ascii=False)
+
         document = KnowledgeDocumentEntity(
             doc_name=request.doc_name,
             doc_type=request.doc_type,
@@ -125,6 +136,7 @@ class KnowledgeService:
             status=SyncStatus.TODO.name,
             last_sync=datetime.now(),
             content=request.content,
+            questions=questions,
             result="",
         )
         doc_id = knowledge_document_dao.create_knowledge_document(document)

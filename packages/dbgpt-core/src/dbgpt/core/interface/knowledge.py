@@ -1,5 +1,6 @@
 """Chunk document schema."""
 
+from calendar import c
 import json
 import uuid
 from typing import Any, Dict, List, Optional
@@ -123,7 +124,7 @@ class Chunk(Document):
                 "Could not import python package: langchain "
                 "Please install langchain by command `pip install langchain"
             )
-        return LCDocument(page_content=chunk.content, metadata=chunk.metadata)
+        return LCDocument(page_content=chunk.content, metadata=chunk.metadata, chunk=chunk.chunk_id)
 
     @classmethod
     def chunk2llamaindex(cls, chunk):
