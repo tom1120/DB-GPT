@@ -13,7 +13,7 @@ from dbgpt.storage.vector_store.base import (
     VectorStoreBase,
     VectorStoreConfig,
 )
-from dbgpt.storage.vector_store.filters import MetadataFilters
+from dbgpt.storage.vector_store.filters import FilterCondition, FilterOperator, MetadataFilters
 from dbgpt.util.i18n_utils import _
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,29 @@ class PGVectorStore(VectorStoreBase):
                 )
         return candidates_chunks
 
+
+    def convert_metadata_filters(self, filters: MetadataFilters) -> dict:
+        """Convert filter to pgvector filters.
+
+        Args:
+            - filters: metadata filters.
+        Returns:
+            - metadata_filters: metadata filters.
+        """
+        metadata_filters = {}
+        filterList = []
+        metadata_filters = {f"${filters.condition}": filterList}
+
+        for metadata_filter in filters.filters:
+            if isinstance(metadata_filter.value, str):
+                expr = {f"{metadata_filter.key}": {f"${metadata_filter.operator}":  f"{metadata_filter.value}"}}
+                filterList.append(expr)
+            else:
+                expr = {f"{metadata_filter.key}": {f"${metadata_filter.operator}":  f"{metadata_filter.value}"}}
+                filterList.append(expr)
+        return metadata_filters
+
+
     
     def similar_search_with_scores(
         self, text: str, topk: int,score_threshold: float, filters: Optional[MetadataFilters] = None
@@ -164,7 +187,11 @@ class PGVectorStore(VectorStoreBase):
         """Perform similar search in PGVector."""
         # chunks = self.vector_store_client.similarity_search_with_score(text, topk, filters)
         embeddings = self.embeddings.embed_documents([text])
-        chunks  = self.vector_store_client._query_collection(embedding=embeddings[0], k=topk, filter=filters)
+
+
+        pgvector_filter = self.convert_metadata_filters(filters) if filters else None
+
+        chunks  = self.vector_store_client._query_collection(embedding=embeddings[0], k=topk, filter=pgvector_filter)
         lc_chunks = [
             (
                 Chunk(
