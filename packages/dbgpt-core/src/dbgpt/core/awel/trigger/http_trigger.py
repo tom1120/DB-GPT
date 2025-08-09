@@ -420,7 +420,7 @@ class HttpTrigger(Trigger):
         response_media_type: Optional[str] = None,
         status_code: Optional[int] = 200,
         router_tags: Optional[List[str | Enum]] = None,
-        register_to_app: bool = False,
+        register_to_app: bool = True,
         **kwargs,
     ) -> None:
         """Initialize a HttpTrigger."""
