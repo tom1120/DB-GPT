@@ -37,7 +37,8 @@ provider = "proxy/siliconflow"
 api_key = "${env:SILICONFLOW_API_KEY}"
 
 [[models.embeddings]]
-name = "BAAI/bge-large-zh-v1.5"
+# name = "BAAI/bge-large-zh-v1.5"
+name = "Qwen/Qwen3-Embedding-0.6B"
 provider = "proxy/openai"
 api_url = "https://api.siliconflow.cn/v1/embeddings"
 api_key = "${env:SILICONFLOW_API_KEY}"
