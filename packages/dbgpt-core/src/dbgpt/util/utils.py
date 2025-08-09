@@ -1,4 +1,5 @@
 import asyncio
+import codecs
 import logging
 import logging.handlers
 import os
@@ -82,7 +83,8 @@ def setup_logging_level(
     else:
         logging.basicConfig(level=logging_level, encoding="utf-8")
 
-
+fmt="%(asctime)s | %(thread)s | %(levelname)s | %(pathname)s:%(lineno)d | %(message)s"
+datefmt="%Y-%m-%d %H:%M:%S"
 def setup_logging(
     logger_name: str,
     log_config: Optional[LoggingParameters] = None,
@@ -104,7 +106,7 @@ def setup_logging(
         import coloredlogs
 
         color_level = logging_level if logging_level else "INFO"
-        coloredlogs.install(level=color_level, logger=logger)
+        coloredlogs.install(level=color_level, logger=logger,fmt=fmt,datefmt=datefmt)
     except ImportError:
         pass
 
@@ -138,7 +140,7 @@ def _build_logger(
     global handler
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        fmt=fmt,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
@@ -169,14 +171,16 @@ def _build_logger(
                 logging.getLogger(name).debug(f"Skipping non-logger: {name}")
 
         if redirect_stdio:
-            stdout_handler = logging.StreamHandler(sys.stdout, encoding="utf-8")
+            # stdout_handler = logging.StreamHandler(sys.stdout, encoding="utf-8")
+            stdout_handler = logging.StreamHandler(sys.stdout)
             stdout_handler.setFormatter(formatter)
-            stderr_handler = logging.StreamHandler(sys.stderr, encoding="utf-8")
+            # stderr_handler = logging.StreamHandler(sys.stderr, encoding="utf-8")
+            stderr_handler = logging.StreamHandler(sys.stderr)
             stderr_handler.setFormatter(formatter)
 
             root_logger = logging.getLogger()
             root_logger.addHandler(stdout_handler)
-            root_logger.addHandler(stderr_handler)
+            # root_logger.addHandler(stderr_handler)
             logging.getLogger().debug("Added stdout and stderr handlers to root logger")
     logger = logging.getLogger(logger_name)
 
