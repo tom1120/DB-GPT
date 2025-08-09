@@ -9,5 +9,5 @@ with DAG("awel_hello_world") as dag:
     task = MapOperator(map_function=lambda x: print(f"Hello, {x}!"))
     input_task >> task
 
-dag.visualize_dag()
+# dag.visualize_dag()
 asyncio.run(task.call(call_data="world"))
